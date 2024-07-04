@@ -105,10 +105,10 @@ def process_ers_data(dca_data: pd.DataFrame):
     call_signs = complete_data["Radiokallesignal (ERS)"].unique()
     # print(call_signs)
     complete_data["Starttidspunkt"] = pd.to_datetime(
-        complete_data["Starttidspunkt"], format="mixed"
+        complete_data["Starttidspunkt"], format="mixed", dayfirst=True
     )
     complete_data["Stopptidspunkt"] = pd.to_datetime(
-        complete_data["Stopptidspunkt"], format="mixed"
+        complete_data["Stopptidspunkt"], format="mixed", dayfirst=True
     )
 
     # Drop time overlapping messages for each vessel
@@ -147,7 +147,9 @@ def process_ers_data(dca_data: pd.DataFrame):
 
     df = complete_data_no_dupes
     df = df.sort_values("Starttidspunkt")
-    df["Meldingstidspunkt"] = pd.to_datetime(df["Meldingstidspunkt"], format="mixed")
+    df["Meldingstidspunkt"] = pd.to_datetime(
+        df["Meldingstidspunkt"], format="mixed", dayfirst=True
+    )
 
     return df
 
