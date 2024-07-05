@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -154,13 +156,60 @@ def process_ers_data(dca_data: pd.DataFrame):
     return df
 
 
+def save_by_month(df: pd.DataFrame, column: str, dest="processed"):
+    """
+    Takes a dataframe, groups it and saves by month using the given
+    column.
+    """
+
+    groups = df.groupby(pd.Grouper(key=column, freq="ME"))
+    dfs_by_month = [month for _, month in groups]
+
+    for month in dfs_by_month:
+        month.index = pd.DatetimeIndex(month[column])
+
+    month_map = {
+        1: "January",
+        2: "February",
+        3: "March",
+        4: "April",
+        5: "May",
+        6: "June",
+        7: "July",
+        8: "August",
+        9: "September",
+        10: "October",
+        11: "November",
+        12: "December",
+    }
+
+    for month_n in dfs_by_month:
+        year = month_n.index.year[0]
+        month = month_n.index.month[0]
+        month_n.to_csv(f"{dest}/{year}_{month_map[month]}.csv", index=False)
+
+
 if __name__ == "__main__":
-    dca_data = pd.read_csv(
-        "data/elektronisk-rapportering-ers-2018-fangstmelding-dca.csv",
-        sep=";",
-        decimal=",",
-    )
+    dca_frames = []
+    file_list = [
+        "elektronisk-rapportering-ers-2018-fangstmelding-dca.csv",
+        "elektronisk-rapportering-ers-2019-fangstmelding-dca.csv",
+    ]
+    # for dca_file in file_list:
+    for dca_file in os.listdir("data"):
+        if dca_file.endswith(".csv"):
+            df = pd.read_csv(os.path.join("data", dca_file), sep=";", decimal=",")
+            dca_frames.append(df)
+
+    dca_data = pd.concat(dca_frames)
+
+    # dca_data = pd.read_csv(
+    #     "data/elektronisk-rapportering-ers-2018-fangstmelding-dca.csv",
+    #     sep=";",
+    #     decimal=",",
+    # )
 
     my_data = process_ers_data(dca_data)
+    my_data.to_csv("processed/combined.csv", index=False)
 
-    my_data.to_csv("processed.csv", index=False)
+    save_by_month(my_data, "Starttidspunkt")
