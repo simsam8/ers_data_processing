@@ -1,7 +1,7 @@
 # ERS Data pre-processing
 
 This project includes code for pre-processing ERS-data 
-from [Fiskedirektoratet](https://www.fiskeridir.no/Tall-og-analyse/AApne-data/elektronisk-rapportering-ers).
+from [Fiskeridirektoratet](https://www.fiskeridir.no/Tall-og-analyse/AApne-data/elektronisk-rapportering-ers).
 
 ## Content
 
