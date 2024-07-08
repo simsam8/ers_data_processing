@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import os
 
 import numpy as np
@@ -6,6 +7,9 @@ import pandas as pd
 
 
 def process_ers_data(dca_data: pd.DataFrame):
+    """
+    Reduces and transforms ERS data.
+    """
 
     keep_columns = [
         "Melding ID",
@@ -103,9 +107,8 @@ def process_ers_data(dca_data: pd.DataFrame):
         ["Meldingstidspunkt", "Starttidspunkt"], ignore_index=True
     )
 
-    message_ids = complete_data["Melding ID"].unique()
+    # message_ids = complete_data["Melding ID"].unique()
     call_signs = complete_data["Radiokallesignal (ERS)"].unique()
-    # print(call_signs)
     complete_data["Starttidspunkt"] = pd.to_datetime(
         complete_data["Starttidspunkt"], format="mixed", dayfirst=True
     )
@@ -122,7 +125,6 @@ def process_ers_data(dca_data: pd.DataFrame):
         i = 0
         len_df = len(messages)
         while i < len_df - 1:
-            # if (messages.iloc[i+1]["Melding ID"] == messages.iloc[i]["Melding ID"] and
             # Message ID can be same or different
             if (
                 messages.iloc[i + 1]["Starttidspunkt"]
@@ -130,7 +132,6 @@ def process_ers_data(dca_data: pd.DataFrame):
                 and messages.iloc[i + 1]["Starttidspunkt"]
                 >= messages.iloc[i]["Starttidspunkt"]
             ):
-                # print(f"Overlap between: {messages.index[i]} and {messages.index[i+1]}")
                 messages = messages.drop(messages.index[i + 1], inplace=False)
                 len_df -= 1
             i += 1
@@ -156,10 +157,15 @@ def process_ers_data(dca_data: pd.DataFrame):
     return df
 
 
-def save_by_month(df: pd.DataFrame, column: str, dest="processed"):
+def save_by_month(df: pd.DataFrame, column: str, dest: str):
     """
     Takes a dataframe, groups it and saves by month using the given
     column.
+
+    Parameters:
+    df: Dataframe
+    column: Datatime column to group by
+    dest: Destination folder
     """
 
     groups = df.groupby(pd.Grouper(key=column, freq="ME"))
@@ -189,27 +195,47 @@ def save_by_month(df: pd.DataFrame, column: str, dest="processed"):
         month_n.to_csv(f"{dest}/{year}_{month_map[month]}.csv", index=False)
 
 
-if __name__ == "__main__":
-    dca_frames = []
-    file_list = [
-        "elektronisk-rapportering-ers-2018-fangstmelding-dca.csv",
-        "elektronisk-rapportering-ers-2019-fangstmelding-dca.csv",
-    ]
-    # for dca_file in file_list:
-    for dca_file in os.listdir("data"):
-        if dca_file.endswith(".csv"):
-            df = pd.read_csv(os.path.join("data", dca_file), sep=";", decimal=",")
-            dca_frames.append(df)
+def main(args):
+    if args.is_dir:
+        dca_frames = []
+        for dca_file in os.listdir(args.filename):
+            if dca_file.endswith(".csv"):
+                df = pd.read_csv(
+                    os.path.join(args.filename, dca_file),
+                    sep=";",
+                    decimal=",",
+                    low_memory=False,
+                )
+                dca_frames.append(df)
 
-    dca_data = pd.concat(dca_frames)
-
-    # dca_data = pd.read_csv(
-    #     "data/elektronisk-rapportering-ers-2018-fangstmelding-dca.csv",
-    #     sep=";",
-    #     decimal=",",
-    # )
+        dca_data = pd.concat(dca_frames)
+    else:
+        dca_data = pd.read_csv(args.filename, sep=";", decimal=",")
 
     my_data = process_ers_data(dca_data)
-    my_data.to_csv("processed/combined.csv", index=False)
+    if args.combine:
+        my_data.to_csv(os.path.join(args.target_dir, "combined.csv"), index=False)
 
-    save_by_month(my_data, "Starttidspunkt")
+    save_by_month(my_data, "Starttidspunkt", dest=args.target_dir)
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(
+        description="Script to process ERS data. Can be used as standalone script,\
+        or imported as a python module."
+    )
+    parser.add_argument("filename")
+    parser.add_argument("target_dir")
+    parser.add_argument(
+        "-d", "--is_dir", action="store_true", help="Read a directory instead of a file"
+    )
+    parser.add_argument(
+        "-c",
+        "--combine",
+        action="store_true",
+        help="Save an additional file with all data combined in one csv file.",
+    )
+    args = parser.parse_args()
+
+    main(args)
