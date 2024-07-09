@@ -33,8 +33,8 @@ def process_ers_data(dca_data: pd.DataFrame):
         "Bruttotonnasje annen",
         "Bredde",
         "Fartøylengde",
-        "Hovedområde start (kode)",
-        "Hovedområde stopp (kode)",
+        "Hovedområde start",
+        "Hovedområde stopp",
     ]
 
     reduced_data = dca_data[keep_columns]
@@ -145,7 +145,7 @@ def process_ers_data(dca_data: pd.DataFrame):
 
     # Drop rows where area is nan
     complete_data_no_dupes = complete_data_no_dupes.dropna(
-        subset=["Hovedområde start (kode)", "Hovedområde stopp (kode)"]
+        subset=["Hovedområde start", "Hovedområde stopp"]
     )
 
     df = complete_data_no_dupes
