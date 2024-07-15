@@ -198,10 +198,10 @@ def save_by_month(df: pd.DataFrame, column: str, dest: str):
 def main(args):
     if args.is_dir:
         dca_frames = []
-        for dca_file in os.listdir(args.filename):
+        for dca_file in os.listdir(args.path):
             if dca_file.endswith(".csv"):
                 df = pd.read_csv(
-                    os.path.join(args.filename, dca_file),
+                    os.path.join(args.path, dca_file),
                     sep=";",
                     decimal=",",
                     low_memory=False,
@@ -210,7 +210,7 @@ def main(args):
 
         dca_data = pd.concat(dca_frames)
     else:
-        dca_data = pd.read_csv(args.filename, sep=";", decimal=",")
+        dca_data = pd.read_csv(args.path, sep=";", decimal=",")
 
     my_data = process_ers_data(dca_data)
     if args.combine:
@@ -225,8 +225,8 @@ if __name__ == "__main__":
         description="Script to process ERS data. Can be used as standalone script,\
         or imported as a python module."
     )
-    parser.add_argument("filename")
-    parser.add_argument("target_dir")
+    parser.add_argument("path", help="Path to file(or directory) containing ERS data")
+    parser.add_argument("target_dir", help="Path to directory where results are stored")
     parser.add_argument(
         "-d", "--is_dir", action="store_true", help="Read a directory instead of a file"
     )
