@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from zipfile import ZipFile
 
+import numpy as np
 import pandas as pd
 
 
@@ -11,7 +12,7 @@ def get_dca_with_mmsi(dca_data_path: str, mmsi_data_path: str):
     """
     Merges dca and mmsi data.
     Returns a dataframe with DCA start and stop times
-    as well as the mmsi.
+    as well as the mmsi and duration.
 
     Parameters:
     -----------
@@ -27,45 +28,97 @@ def get_dca_with_mmsi(dca_data_path: str, mmsi_data_path: str):
     ).drop(columns=["kallesignal"])
     merged["Starttidspunkt"] = pd.to_datetime(merged["Starttidspunkt"])
     merged["Stopptidspunkt"] = pd.to_datetime(merged["Stopptidspunkt"])
-    return merged[["Starttidspunkt", "Stopptidspunkt", "mmsi"]]
+    return merged[["Starttidspunkt", "Stopptidspunkt", "mmsi", "Varighet"]]
 
 
-def _process_chunk(
-    ais_chunk,
-    start_times,
-    stop_times,
-    dca_mmsi,
-):
+def get_fish_trips_with_mmsi(fish_trip_data_path: str, mmsi_data_path: str):
     """
-    Intermediate function to check if ais datetime is
-    in dca fishing interval.
-    Returns ais data marked whether its fishing or not.
-    """
-    ais_dates = ais_chunk["date_time_utc"].values
-    chunk_mmsi = ais_chunk["mmsi"].values
+    Merges fishing trip data and mmsi data.
+    Returns a dataframe with DCA start and stop times
+    as well as the mmsi and trip id.
 
-    # Use broadcasting to create a boolean array,
-    # where True means the date is in the interval
-    is_in_start = ais_dates[:, None] >= start_times
-    is_in_stop = ais_dates[:, None] <= stop_times
-    same_mmsi = chunk_mmsi[:, None] == dca_mmsi
+    Parameters:
+    -----------
+    fish_trip_data_path: path to fishing trips data
+    mmsi_data_path: path to mmsi data
+    """
+    ft = pd.read_csv(fish_trip_data_path)
+    mmsi_data = pd.read_excel(mmsi_data_path)
+    mmsi_data = mmsi_data[["mmsi", "kallesignal"]]
+
+    merged = ft.merge(mmsi_data, left_on="ERS", right_on="kallesignal").drop(
+        columns=["kallesignal"]
+    )
+    merged["Avgangstidspunkt"] = pd.to_datetime(merged["Avgangstidspunkt"])
+    merged["Ankomsttidspunkt"] = pd.to_datetime(merged["Ankomsttidspunkt"])
+    return merged[["Avgangstidspunkt", "Ankomsttidspunkt", "mmsi", "trip_id"]]
+
+
+def _calculate_in_interval(chunk, other, start_column: str, stop_column: str):
+    """
+    Helper function to check if an AIS row is in the interval
+    of any of the rows of the other dataframe.
+    Start and stop columns are found in the other dataframe.
+    """
+
+    dates = chunk["date_time_utc"].values
+    chunk_mmsi = chunk["mmsi"].values
+    other_mmsi = other["mmsi"].values
+    start_times = other[start_column].values
+    stop_times = other[stop_column].values
+
+    # Use broadcasting to create a boolean array where True
+    # means the date is in the interval
+    is_in_start = dates[:, None] >= start_times
+    is_in_stop = dates[:, None] <= stop_times
+    same_mmsi = chunk_mmsi[:, None] == other_mmsi
     is_in_interval = (is_in_start & is_in_stop) & same_mmsi
-
-    # Any interval containing the ais_date will have True in the row
-    ais_chunk["fishing"] = is_in_interval.any(axis=1)
-    return ais_chunk
+    return is_in_interval
 
 
-def process_ais(file_path: str, dca_data: pd.DataFrame):
+def _apply_marks(chunk, dca_slice, fishing_trips):
     """
-    Process a single file with ais data,
-    uses dca_data to mark whether it is fishing or not.
+    Helper function to mark AIS row with DCA duration and fishing state,
+    and fishing trip id.
+    """
+    trip_ids = fishing_trips["trip_id"].values
+    duration = dca_slice["Varighet"].values
+
+    is_in_interval_trip = _calculate_in_interval(
+        chunk, fishing_trips, "Avgangstidspunkt", "Ankomsttidspunkt"
+    )
+    is_in_interval_dca = _calculate_in_interval(
+        chunk, dca_slice, "Starttidspunkt", "Stopptidspunkt"
+    )
+
+    # Initialize the duration column with NaN
+    chunk["trip_id"] = np.nan
+    chunk["duration"] = np.nan
+
+    # Assign the duration and trip id where the interval is True
+    for i in range(len(chunk)):
+        if is_in_interval_dca[i].any():
+            chunk.loc[i, "duration"] = duration[is_in_interval_dca[i]].max()
+        if is_in_interval_trip[i].any():
+            chunk.loc[i, "trip_id"] = trip_ids[is_in_interval_trip[i]].max()
+
+    chunk["fishing"] = is_in_interval_dca.any(axis=1)
+    return chunk
+
+
+def process_ais(file_path, dca_data, fishing_trips):
+    """
+    Process a single compressed zip file with ais data,
+    uses dca_data to mark with fishing information,
+    and fishing trips to connect AIS with corresponding
+    fishing trip.
     Returns marked ais data.
 
     Parameters:
     -----------
     file_path: path to AIS data
     dca_data: dataframe with dca data
+    fishing_trips: dataframe with fishing trip data
     """
     # Read AIS file
     column_dtypes = {
@@ -82,34 +135,36 @@ def process_ais(file_path: str, dca_data: pd.DataFrame):
     ais_data = pd.read_csv(file_path, sep=";", dtype=column_dtypes, compression="zip")
     ais_data["date_time_utc"] = pd.to_datetime(ais_data["date_time_utc"])
 
-    # Get date from AIS filename and filter DCA data
+    # Get date from AIS filename and, filter DCA data and fishing trips
     ais_date = os.path.basename(file_path)[4:-4]
     dca_slice = dca_data.where(
         dca_data["Starttidspunkt"].dt.date
         == datetime.strptime(ais_date, "%Y%m%d").date()
     ).dropna()
+    fish_trip_slice = fishing_trips.where(
+        fishing_trips["Avgangstidspunkt"].dt.date
+        == datetime.strptime(ais_date, "%Y%m%d").date()
+    ).dropna()
 
-    # Convert interval times to numpy arrays
-    start_times = dca_slice["Starttidspunkt"].values
-    stop_times = dca_slice["Stopptidspunkt"].values
-    dca_mmsis = dca_slice["mmsi"].values
-
-    # print(f"{ais_date}, Size of AIS: {len(ais_data)}, Size of DCA: {len(dca_slice)}")
-    result = _process_chunk(ais_data, start_times, stop_times, dca_mmsis)
+    result = _apply_marks(ais_data, dca_slice, fish_trip_slice)
     return result
 
 
-def mark_ais_fishing(ais_data_path: str, dca_date_slice, save_destination: str) -> None:
+def process_ais_folder(ais_data_path, dca_date_slice, fishing_trips, save_destination):
     """
-    Reads all ais data from a year, marks fishing status, and saves to destination.
+    Reads all files from folder containing AIS data, marks fishing status,\
+    and saves to destination.
     """
     ais_list = os.listdir(ais_data_path)
-    if not os.path.exists(save_destination):
-        os.mkdir(save_destination)
-    for ais_day in ais_list:
+    for i, ais_day in enumerate(ais_list):
         if ais_day.endswith(".zip"):
-            ais_df = process_ais(os.path.join(ais_data_path, ais_day), dca_date_slice)
+            print(i, end=" ")
+            ais_df = process_ais(
+                os.path.join(ais_data_path, ais_day), dca_date_slice, fishing_trips
+            )
             filename = f"{ais_day[:-4]}"
+            if not os.path.exists(save_destination):
+                os.mkdir(save_destination)
             ais_df.to_parquet(f"{save_destination}/{filename}.parquet")
 
 
@@ -139,6 +194,7 @@ def zip_ais_directory(dir_to_zip, destination):
 def main(args):
 
     dca_data = get_dca_with_mmsi(args.dca_path, args.mmsi_path)
+    fishing_trips = get_fish_trips_with_mmsi(args.f_trips_path, args.mmsi_path)
     if args.is_dir:
         # Unzip
         print("Unzipping...")
@@ -153,7 +209,7 @@ def main(args):
             if ais_dir.startswith("AIS") and not ais_dir.endswith(".zip"):
                 filepath_dir = os.path.join(args.path, ais_dir)
                 target_dir = os.path.join(args.target_dir, ais_dir)
-                mark_ais_fishing(filepath_dir, dca_data, target_dir)
+                process_ais_folder(filepath_dir, dca_data, fishing_trips, target_dir)
                 print(f"Finished marking {ais_dir}.")
                 if args.zip:
                     zip_ais_directory(target_dir, f"{target_dir}.zip")
@@ -164,7 +220,7 @@ def main(args):
         unzip_ais(args.path)
         ais_dir = args.path[:-4]
         print("Processing and marking...")
-        mark_ais_fishing(ais_dir, dca_data, args.target_dir)
+        process_ais_folder(ais_dir, dca_data, fishing_trips, args.target_dir)
         if args.zip:
             print("Zipping...")
             zip_ais_directory(args.target_dir, f"{args.target_dir}.zip")
@@ -174,8 +230,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Script to mark AIS data with fishing tag. Can be used as a \
-        standalone script, or imported as a python module."
+        description="Script to mark AIS data with information about fishing trip.\
+        Can be used as a standalone script, or imported as a python module."
     )
     parser.add_argument(
         "path", help="Path to file(or directory) containing zipped AIS data"
@@ -183,6 +239,9 @@ if __name__ == "__main__":
     parser.add_argument("target_dir", help="Path to directory where results are stored")
     parser.add_argument(
         "--dca_path", help="Path to DCA data created from process_ers.py", required=True
+    )
+    parser.add_argument(
+        "--f_trips_path", help="Path to fishing trips data", required=True
     )
     parser.add_argument(
         "--mmsi_path", help="Path to MMSI data in xlsx format", required=True
