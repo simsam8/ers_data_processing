@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 
 
-def process_ers_data(dca_data: pd.DataFrame):
+def process_dca_data(dca_data: pd.DataFrame):
     """
-    Reduces and transforms ERS data.
+    Reduces and transforms DCA data.
     """
 
     keep_columns = [
@@ -212,7 +212,7 @@ def main(args):
     else:
         dca_data = pd.read_csv(args.path, sep=";", decimal=",")
 
-    my_data = process_ers_data(dca_data)
+    my_data = process_dca_data(dca_data)
     if args.combine:
         my_data.to_csv(os.path.join(args.target_dir, "combined.csv"), index=False)
 
@@ -222,10 +222,10 @@ def main(args):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        description="Script to process ERS data. Can be used as standalone script,\
+        description="Script to process DCA data. Can be used as standalone script,\
         or imported as a python module."
     )
-    parser.add_argument("path", help="Path to file(or directory) containing ERS data")
+    parser.add_argument("path", help="Path to file(or directory) containing DCA data")
     parser.add_argument("target_dir", help="Path to directory where results are stored")
     parser.add_argument(
         "-d", "--is_dir", action="store_true", help="Read a directory instead of a file"
