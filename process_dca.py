@@ -174,25 +174,12 @@ def save_by_month(df: pd.DataFrame, column: str, dest: str):
     for month in dfs_by_month:
         month.index = pd.DatetimeIndex(month[column])
 
-    month_map = {
-        1: "January",
-        2: "February",
-        3: "March",
-        4: "April",
-        5: "May",
-        6: "June",
-        7: "July",
-        8: "August",
-        9: "September",
-        10: "October",
-        11: "November",
-        12: "December",
-    }
-
     for month_n in dfs_by_month:
-        year = month_n.index.year[0]
-        month = month_n.index.month[0]
-        month_n.to_csv(f"{dest}/{year}_{month_map[month]}.csv", index=False)
+        # Skip months with zero entries
+        if month_n.size > 0:
+            year = month_n.index.year[0]
+            month = month_n.index.month[0]
+            month_n.to_csv(f"{dest}/{year}_{month}.csv", index=False)
 
 
 def main(args):
