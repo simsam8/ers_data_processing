@@ -4,7 +4,6 @@
 import pandas as pd
 import plotly.express as px
 from dash import Dash, Input, Output, callback, dcc, html
-from dash.exceptions import PreventUpdate
 
 df = pd.read_csv("processed/dca/combined.csv")
 df["Starttidspunkt"] = pd.to_datetime(df["Starttidspunkt"])
@@ -49,9 +48,28 @@ def generate_table(dataframe, max_rows=10):
     )
 
 
-def species_weight_over_time(interval="year", creation_call=False):
-    filtered_df = pd.melt(
-        df,
+def generate_interval_menu(id):
+    return html.Div(
+        [
+            dcc.RadioItems(
+                options={"year": "Yearly", "month": "Monthly"},
+                value="year",
+                id=f"{id}_interval_radio",
+            ),
+            # TODO: Set min and max values from loaded dataframe slice
+            dcc.Slider(
+                id=f"{id}_interval_slider", min=1, max=10, step=1, disabled=True
+            ),
+        ]
+    )
+
+
+def fig_species_weight(interval="year", year_n=2014):
+    filtered_df = df
+    if interval == "month":
+        filtered_df = filtered_df[filtered_df["year"] == year_n]
+
+    filtered_df = filtered_df.melt(
         id_vars=[interval],
         var_name="species",
         value_name="weight",
@@ -61,14 +79,61 @@ def species_weight_over_time(interval="year", creation_call=False):
     fig = px.line(
         filtered_df, x=interval, y="weight", color="species", symbol="species"
     )
-    if not creation_call:
-        return fig
-    else:
-        return (
-            [
-                dcc.Graph(id="current_graph", figure=fig),
-            ],
-        )
+    return fig
+
+
+def fig_vessel_catch(interval="year", year_n=2014):
+    filtered_df = df
+    if interval == "month":
+        filtered_df = filtered_df[filtered_df["year"] == year_n]
+
+    filtered_df = filtered_df[[interval, "Radiokallesignal (ERS)", "Rundvekt"]]
+
+    filtered_df = filtered_df.groupby(
+        [interval, "Radiokallesignal (ERS)"], as_index=False
+    ).sum()
+    fig = px.line(
+        filtered_df,
+        x=interval,
+        y="Rundvekt",
+        color="Radiokallesignal (ERS)",
+        symbol="Radiokallesignal (ERS)",
+    )
+    return fig
+
+
+def fig_area_catch(interval="year", year_n=2014):
+    filtered_df = df
+    if interval == "month":
+        filtered_df = filtered_df[filtered_df["year"] == year_n]
+
+    filtered_df = filtered_df[[interval, "Hovedområde start", "Rundvekt"]]
+    filtered_df = filtered_df.groupby(
+        [interval, "Hovedområde start"], as_index=False
+    ).sum()
+    fig = px.line(
+        filtered_df,
+        x=interval,
+        y="Rundvekt",
+        color="Hovedområde start",
+        symbol="Hovedområde start",
+    )
+    return fig
+
+
+def create_container(id, title, graph_function=None, **kwargs):
+    container = html.Div(
+        [
+            html.H2(title),
+            generate_interval_menu(id=f"{id}"),
+            (
+                dcc.Graph(id=f"{id}_graph", figure=graph_function(**kwargs))
+                if graph_function is not None
+                else dcc.Graph(id=f"{id}_graph")
+            ),
+        ]
+    )
+    return container
 
 
 app = Dash(__name__)
@@ -78,27 +143,55 @@ app.layout = html.Div(
     children=[
         generate_table(df),
         html.Div(
-            id="species_weight_over_time",
             children=[
-                html.H2("Species weight over time"),
-                html.Label("Time interval"),
-                dcc.Dropdown(["Yearly", "Monthly"], id="time_interval"),
-                dcc.Graph(id="species_weight_graph"),
+                create_container(
+                    id="species_over_time",
+                    title="Species weight over time",
+                    graph_function=fig_species_weight,
+                ),
+                create_container(
+                    id="vessel_catch",
+                    title="Vessels catch over time",
+                    graph_function=fig_vessel_catch,
+                ),
+                create_container(
+                    id="area_catch",
+                    title="Area catch over time",
+                    graph_function=fig_area_catch,
+                ),
             ],
         ),
     ]
 )
 
+####################
+# Callback functions
+####################
 
-@callback(
-    Output("species_weight_graph", "figure"),
-    Input("time_interval", "value"),
-)
-def set_graph_interval(interval):
-    if not interval:
-        raise PreventUpdate
-    mapping = {"Yearly": "year", "Monthly": "month"}
-    return species_weight_over_time(mapping[interval])
+
+def set_graph_interval(container_id, graph_function):
+    @callback(
+        Output(f"{container_id}_graph", "figure"),
+        Input(f"{container_id}_interval_radio", "value"),
+    )
+    def repeat_callback(interval):
+        return graph_function(interval)
+
+    @callback(
+        Output(f"{container_id}_interval_slider", "disabled"),
+        Input(f"{container_id}_interval_radio", "value"),
+    )
+    def toggle_year_slider(interval):
+        if interval == "year":
+            return True
+        elif interval == "month":
+            return False
+
+
+# Initialize callbacks
+set_graph_interval("species_over_time", fig_species_weight)
+set_graph_interval("vessel_catch", fig_vessel_catch)
+set_graph_interval("area_catch", fig_area_catch)
 
 
 if __name__ == "__main__":
