@@ -3,7 +3,7 @@
 
 import pandas as pd
 from dash import Dash, Input, Output, callback, dcc, html
-from figures import fig_area_catch, fig_species_weight, fig_vessel_catch
+from figures import fig_area_catch, fig_pie_chart, fig_species_weight, fig_vessel_catch
 
 df = pd.read_csv("processed/dca/combined.csv")
 df["Starttidspunkt"] = pd.to_datetime(df["Starttidspunkt"])
@@ -51,11 +51,27 @@ def generate_interval_menu(id) -> html.Div:
     )
 
 
-def create_container(id, title, graph_function=None, **kwargs) -> html.Div:
+def create_container(id, title, graph_type, graph_function=None, **kwargs) -> html.Div:
+    """
+    Creates a container with a given graph type and graph function.
+
+    Args:
+        id (str) : container id.
+        title (str) : container title.
+        graph_type (str) : Type of graph to use. (interval, pie)
+        graph_function (func) : Graphing function to generate figure.
+
+    Returns:
+        A html.Div containing graph and menu
+    """
+    if graph_type == "interval":
+        menu = generate_interval_menu(id=f"{id}")
+    else:
+        menu = html.Div()
     container = html.Div(
         [
             html.H2(title),
-            generate_interval_menu(id=f"{id}"),
+            menu,
             (
                 dcc.Graph(id=f"{id}_graph", figure=graph_function(df, **kwargs))
                 if graph_function is not None
@@ -77,17 +93,27 @@ app.layout = html.Div(
                 create_container(
                     id="species_over_time",
                     title="Species weight over time",
+                    graph_type="interval",
                     graph_function=fig_species_weight,
                 ),
                 create_container(
                     id="vessel_catch",
                     title="Vessels catch over time",
+                    graph_type="interval",
                     graph_function=fig_vessel_catch,
                 ),
                 create_container(
                     id="area_catch",
                     title="Area catch over time",
+                    graph_type="interval",
                     graph_function=fig_area_catch,
+                ),
+                create_container(
+                    id="vessel_pie",
+                    title="Vessel pie chart",
+                    graph_type="pie",
+                    graph_function=fig_pie_chart,
+                    category="species",
                 ),
             ],
         ),
@@ -119,6 +145,8 @@ def set_graph_interval(container_id, graph_function):
             return True
         elif interval == "month":
             return False
+
+# TODO: Add callback for pie chart graphs
 
 
 # Initialize callbacks
