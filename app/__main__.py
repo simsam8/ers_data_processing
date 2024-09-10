@@ -1,10 +1,9 @@
-# Run this app with `python app.py` and
+# Run this app with `python app` and
 # visit http://127.0.0.1:8050/ in your web browser.
 
 import pandas as pd
-import plotly.express as px
-from plotly.graph_objs import Figure
 from dash import Dash, Input, Output, callback, dcc, html
+from figures import fig_area_catch, fig_species_weight, fig_vessel_catch
 
 df = pd.read_csv("processed/dca/combined.csv")
 df["Starttidspunkt"] = pd.to_datetime(df["Starttidspunkt"])
@@ -14,23 +13,6 @@ year_max = df["year"].max()
 year_min = df["year"].min()
 
 vessels = df["Radiokallesignal (ERS)"].unique()
-species = [
-    "Blåkveite",
-    "Breiflabb",
-    "Dypvannsreke",
-    "Flekksteinbit",
-    "Gråsteinbit",
-    "Hyse",
-    "Kveite",
-    "Lange",
-    "Lyr",
-    "Lysing",
-    "Sei",
-    "Snabeluer",
-    "Torsk",
-    "Uer (vanlig)",
-    "ANDRE",
-]
 
 
 def generate_table(dataframe, max_rows=10) -> html.Table:
@@ -69,70 +51,13 @@ def generate_interval_menu(id) -> html.Div:
     )
 
 
-def fig_species_weight(interval="year", year_n=2014) -> Figure:
-    filtered_df = df
-    if interval == "month":
-        filtered_df = filtered_df[filtered_df["year"] == year_n]
-
-    filtered_df = filtered_df.melt(
-        id_vars=[interval],
-        var_name="species",
-        value_name="weight",
-        value_vars=species,
-    )
-    filtered_df = filtered_df.groupby([interval, "species"], as_index=False).sum()
-    fig = px.line(
-        filtered_df, x=interval, y="weight", color="species", symbol="species"
-    )
-    return fig
-
-
-def fig_vessel_catch(interval="year", year_n=2014) -> Figure:
-    filtered_df = df
-    if interval == "month":
-        filtered_df = filtered_df[filtered_df["year"] == year_n]
-
-    filtered_df = filtered_df[[interval, "Radiokallesignal (ERS)", "Rundvekt"]]
-
-    filtered_df = filtered_df.groupby(
-        [interval, "Radiokallesignal (ERS)"], as_index=False
-    ).sum()
-    fig = px.line(
-        filtered_df,
-        x=interval,
-        y="Rundvekt",
-        color="Radiokallesignal (ERS)",
-        symbol="Radiokallesignal (ERS)",
-    )
-    return fig
-
-
-def fig_area_catch(interval="year", year_n=None) -> Figure:
-    filtered_df = df
-    if interval == "month" and year_n is not None:
-        filtered_df = filtered_df[filtered_df["year"] == year_n]
-
-    filtered_df = filtered_df[[interval, "Hovedområde start", "Rundvekt"]]
-    filtered_df = filtered_df.groupby(
-        [interval, "Hovedområde start"], as_index=False
-    ).sum()
-    fig = px.line(
-        filtered_df,
-        x=interval,
-        y="Rundvekt",
-        color="Hovedområde start",
-        symbol="Hovedområde start",
-    )
-    return fig
-
-
 def create_container(id, title, graph_function=None, **kwargs) -> html.Div:
     container = html.Div(
         [
             html.H2(title),
             generate_interval_menu(id=f"{id}"),
             (
-                dcc.Graph(id=f"{id}_graph", figure=graph_function(**kwargs))
+                dcc.Graph(id=f"{id}_graph", figure=graph_function(df, **kwargs))
                 if graph_function is not None
                 else dcc.Graph(id=f"{id}_graph")
             ),
@@ -183,7 +108,7 @@ def set_graph_interval(container_id, graph_function):
         ],
     )
     def set_graph_year(interval, year):
-        return graph_function(interval, year)
+        return graph_function(df, interval, year)
 
     @callback(
         Output(f"{container_id}_interval_slider", "disabled"),
