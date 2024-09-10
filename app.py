@@ -3,6 +3,7 @@
 
 import pandas as pd
 import plotly.express as px
+from plotly.graph_objs import Figure
 from dash import Dash, Input, Output, callback, dcc, html
 
 df = pd.read_csv("processed/dca/combined.csv")
@@ -32,7 +33,7 @@ species = [
 ]
 
 
-def generate_table(dataframe, max_rows=10):
+def generate_table(dataframe, max_rows=10) -> html.Table:
     return html.Table(
         [
             html.Thead(html.Tr([html.Th(col) for col in dataframe.columns])),
@@ -48,7 +49,7 @@ def generate_table(dataframe, max_rows=10):
     )
 
 
-def generate_interval_menu(id):
+def generate_interval_menu(id) -> html.Div:
     return html.Div(
         [
             dcc.RadioItems(
@@ -56,15 +57,19 @@ def generate_interval_menu(id):
                 value="year",
                 id=f"{id}_interval_radio",
             ),
-            # TODO: Set min and max values from loaded dataframe slice
             dcc.Slider(
-                id=f"{id}_interval_slider", min=1, max=10, step=1, disabled=True
+                id=f"{id}_interval_slider",
+                min=year_min,
+                max=year_max,
+                step=1,
+                disabled=True,
+                marks={i: f"{i}" for i in range(int(year_min), year_max + 1)},
             ),
         ]
     )
 
 
-def fig_species_weight(interval="year", year_n=2014):
+def fig_species_weight(interval="year", year_n=2014) -> Figure:
     filtered_df = df
     if interval == "month":
         filtered_df = filtered_df[filtered_df["year"] == year_n]
@@ -82,7 +87,7 @@ def fig_species_weight(interval="year", year_n=2014):
     return fig
 
 
-def fig_vessel_catch(interval="year", year_n=2014):
+def fig_vessel_catch(interval="year", year_n=2014) -> Figure:
     filtered_df = df
     if interval == "month":
         filtered_df = filtered_df[filtered_df["year"] == year_n]
@@ -102,9 +107,9 @@ def fig_vessel_catch(interval="year", year_n=2014):
     return fig
 
 
-def fig_area_catch(interval="year", year_n=2014):
+def fig_area_catch(interval="year", year_n=None) -> Figure:
     filtered_df = df
-    if interval == "month":
+    if interval == "month" and year_n is not None:
         filtered_df = filtered_df[filtered_df["year"] == year_n]
 
     filtered_df = filtered_df[[interval, "Hovedområde start", "Rundvekt"]]
@@ -121,7 +126,7 @@ def fig_area_catch(interval="year", year_n=2014):
     return fig
 
 
-def create_container(id, title, graph_function=None, **kwargs):
+def create_container(id, title, graph_function=None, **kwargs) -> html.Div:
     container = html.Div(
         [
             html.H2(title),
@@ -172,10 +177,13 @@ app.layout = html.Div(
 def set_graph_interval(container_id, graph_function):
     @callback(
         Output(f"{container_id}_graph", "figure"),
-        Input(f"{container_id}_interval_radio", "value"),
+        [
+            Input(f"{container_id}_interval_radio", "value"),
+            Input(f"{container_id}_interval_slider", "value"),
+        ],
     )
-    def repeat_callback(interval):
-        return graph_function(interval)
+    def set_graph_year(interval, year):
+        return graph_function(interval, year)
 
     @callback(
         Output(f"{container_id}_interval_slider", "disabled"),
