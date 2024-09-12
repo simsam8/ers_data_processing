@@ -3,6 +3,7 @@
 
 import pandas as pd
 from dash import Dash, Input, Output, callback, dcc, html
+import plotly
 from figures import fig_area_catch, fig_pie_chart, fig_species_weight, fig_vessel_catch
 
 df = pd.read_csv("processed/dca/combined.csv")
@@ -51,6 +52,24 @@ def generate_interval_menu(id) -> html.Div:
     )
 
 
+def generate_pie_chart_menu(id) -> html.Div:
+    return html.Div(
+        [
+            dcc.RadioItems(
+                options=["vessels", "species", "area"],
+                value="vessels",
+                id=f"{id}_category_radio",
+            ),
+            dcc.Input(
+                type="number",
+                value=5,
+                min=2,
+                id=f"{id}_number_input",
+            ),
+        ]
+    )
+
+
 def create_container(id, title, graph_type, graph_function=None, **kwargs) -> html.Div:
     """
     Creates a container with a given graph type and graph function.
@@ -65,9 +84,9 @@ def create_container(id, title, graph_type, graph_function=None, **kwargs) -> ht
         A html.Div containing graph and menu
     """
     if graph_type == "interval":
-        menu = generate_interval_menu(id=f"{id}")
+        menu = generate_interval_menu(id=id)
     else:
-        menu = html.Div()
+        menu = generate_pie_chart_menu(id=id)
     container = html.Div(
         [
             html.H2(title),
@@ -109,11 +128,11 @@ app.layout = html.Div(
                     graph_function=fig_area_catch,
                 ),
                 create_container(
-                    id="vessel_pie",
-                    title="Vessel pie chart",
+                    id="pie_top_n",
+                    title="Top N pie chart",
                     graph_type="pie",
                     graph_function=fig_pie_chart,
-                    category="species",
+                    category="vessels",
                 ),
             ],
         ),
@@ -146,7 +165,19 @@ def set_graph_interval(container_id, graph_function):
         elif interval == "month":
             return False
 
-# TODO: Add callback for pie chart graphs
+
+@callback(
+    Output("pie_top_n_graph", "figure"),
+    [
+        Input("pie_top_n_category_radio", "value"),
+        Input("pie_top_n_number_input", "value"),
+    ],
+)
+def update_pie_chart(category, number):
+    if type(number) is not int:
+        return plotly.graph_objs.Figure()
+    else:
+        return fig_pie_chart(df, category, number)
 
 
 # Initialize callbacks
