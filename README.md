@@ -1,17 +1,20 @@
-# ERS Data pre-processing
+# ERS Data pre-processing and visualization
 
-This project includes code for processing ERS-data and AIS-data
+This project includes code for processing and visualization of ERS-data and AIS-data
 from [Fiskeridirektoratet](https://www.fiskeridir.no/Tall-og-analyse/AApne-data/elektronisk-rapportering-ers).
 
 ## Content
 
-- `process_dca.py`: script for processing DCA data.
-- `process_fishing_trips.py`: script for defining fishing trips.
-- `process_ais.py`: script for processing and marking AIS data
-- `extract_ers_data.py`: script to automatically extract raw ERS data
-- `visualization.ipynb`: notebook for visualization of data 
+- `scripts\`: contains all pre-processing scripts
+    - `process_dca.py`: script for processing DCA data.
+    - `process_fishing_trips.py`: script for defining fishing trips.
+    - `process_ais.py`: script for processing and marking AIS data
+    - `extract_ers_data.py`: script to automatically extract raw ERS data
+- `app\`: visualization webapp
+    - `__main__.py`
+    - `figures.py`
 
-## How to use
+## Pre-processing Scripts
 
 ### extract_ers_data.py
 
@@ -57,7 +60,7 @@ Arguments:
 - `-z`, `--zip`(optional): zips the resulting directories
 
 
-## Example usage
+### Example usage
 
 Before using any of the scripts, the folder structure might 
 look something like this.
@@ -77,7 +80,7 @@ data/
 
 To extract the raw ERS data you can use the `extract_ers_data.py` like so:
 ```
-./extract_ers_data.py data/raw data/
+./scripts/extract_ers_data.py data/raw data/
 ```
 
 ```
@@ -115,12 +118,12 @@ processed/dca/
 
 To process a whole directory,
 ```
-./process_dca.py data/dca/ processed/dca/ -d
+./scripts/process_dca.py data/dca/ processed/dca/ -d
 ```
 
 or a single file.
 ```
-./process_dca.py data/dca/elektronisk-rapportering-ers-2011-fangstmelding-dca.csv processed/dca/
+./scripts/process_dca.py data/dca/elektronisk-rapportering-ers-2011-fangstmelding-dca.csv processed/dca/
 ```
 
 An additional flag `-c` can be added to store all DCA data in a single 
@@ -150,7 +153,7 @@ The first to arguments are the directories for DEP and POR data.
 Then choose where to store the result csv file.
 
 ```
-./process_fishing_trips.py data/dep/ data/por/ processed/fishing_trips.csv
+./scripts/process_fishing_trips.py data/dep/ data/por/ processed/fishing_trips.csv
 ```
 
 
@@ -176,20 +179,26 @@ The script needs processed DCA and fishing trip data, and a ERS to MMSI table.
 You can read a whole directory of zipped AIS data with the `-d` flag,
 
 ```
-./process_ais.py data/ais_data processed/ais --dca_path processed/dca/combined.csv \
+./scripts/process_ais.py data/ais_data processed/ais --dca_path processed/dca/combined.csv \
 --f_trips_path processed/fishing_trips.csv --mmsi_path data/MMSI_rc_20211027_.xlsx -d
 ```
 
 or only a single zip file.
 
 ```
-./process_ais.py data/ais_data processed/ais/AIS_data_2015.zip \
+./scripts/process_ais.py data/ais_data processed/ais/AIS_data_2015.zip \
 --dca_path processed/dca/combined.csv \
 --f_trips_path processed/fishing_trips.csv --mmsi_path data/MMSI_rc_20211027_.xlsx
 ```
 
 An additional flag `-z` can be added to zip compress the output.
 
+
+## Visualization Webapp
+
+To run the visualization app all you have to do is run and open `localhost:8050` in your browser:
+
+```python app 'path_to_processed_and_combined_dca.csv'```
 
 
 
