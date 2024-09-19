@@ -1,12 +1,20 @@
 # Run this app with `python app` and
 # visit http://127.0.0.1:8050/ in your web browser.
 
+import argparse
+
 import pandas as pd
 import plotly
 from dash import Dash, Input, Output, callback, dcc, html
 from figures import fig_area_catch, fig_pie_chart, fig_species_weight, fig_vessel_catch
 
-df = pd.read_csv("processed/dca/combined.csv")
+parser = argparse.ArgumentParser(description="App for visualizing fishing data.")
+parser.add_argument(
+    "path_dca", help="Path to csv containing processed and combined DCA data"
+)
+args = parser.parse_args()
+
+df = pd.read_csv(args.path_dca)
 df["Starttidspunkt"] = pd.to_datetime(df["Starttidspunkt"])
 df["year"] = df["Starttidspunkt"].dt.year
 df["month"] = df["Starttidspunkt"].dt.month
@@ -33,9 +41,7 @@ def generate_table(df, max_rows=10) -> html.Table:
             html.Thead(html.Tr([html.Th(col) for col in df.columns])),
             html.Tbody(
                 [
-                    html.Tr(
-                        [html.Td(df.iloc[i][col]) for col in df.columns]
-                    )
+                    html.Tr([html.Td(df.iloc[i][col]) for col in df.columns])
                     for i in range(min(len(df), max_rows))
                 ]
             ),
@@ -135,7 +141,7 @@ app.config.suppress_callback_exceptions = True
 
 app.layout = html.Div(
     children=[
-        generate_table(df),
+        # generate_table(df),
         html.Div(
             children=[
                 create_container(
