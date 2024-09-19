@@ -2,8 +2,8 @@
 # visit http://127.0.0.1:8050/ in your web browser.
 
 import pandas as pd
-from dash import Dash, Input, Output, callback, dcc, html
 import plotly
+from dash import Dash, Input, Output, callback, dcc, html
 from figures import fig_area_catch, fig_pie_chart, fig_species_weight, fig_vessel_catch
 
 df = pd.read_csv("processed/dca/combined.csv")
@@ -16,16 +16,27 @@ year_min = df["year"].min()
 vessels = df["Radiokallesignal (ERS)"].unique()
 
 
-def generate_table(dataframe, max_rows=10) -> html.Table:
+def generate_table(df, max_rows=10) -> html.Table:
+    """
+    Generate a table of the given dataframe:
+
+    Arg:
+        df : A pandas dataframe
+        max_rows : Number of rows to display
+
+    Returns:
+        A html.Table of the dataframe
+
+    """
     return html.Table(
         [
-            html.Thead(html.Tr([html.Th(col) for col in dataframe.columns])),
+            html.Thead(html.Tr([html.Th(col) for col in df.columns])),
             html.Tbody(
                 [
                     html.Tr(
-                        [html.Td(dataframe.iloc[i][col]) for col in dataframe.columns]
+                        [html.Td(df.iloc[i][col]) for col in df.columns]
                     )
-                    for i in range(min(len(dataframe), max_rows))
+                    for i in range(min(len(df), max_rows))
                 ]
             ),
         ]
@@ -33,6 +44,15 @@ def generate_table(dataframe, max_rows=10) -> html.Table:
 
 
 def generate_interval_menu(id) -> html.Div:
+    """
+    Creates a menu for an interval menu:
+
+    Args:
+        id (str) : container id
+
+    Returns:
+        A html.Div of the interval menu
+    """
     return html.Div(
         [
             dcc.RadioItems(
@@ -53,6 +73,15 @@ def generate_interval_menu(id) -> html.Div:
 
 
 def generate_pie_chart_menu(id) -> html.Div:
+    """
+    Creates a menu for the pie chart.
+
+    Args:
+        id (str) : container id
+
+    Returns:
+        A html.Div of the pie chart menu
+    """
     return html.Div(
         [
             dcc.RadioItems(
