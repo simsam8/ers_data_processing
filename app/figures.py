@@ -1,5 +1,6 @@
 import pandas as pd
 import plotly.express as px
+from pandas import DataFrame
 from plotly.graph_objs import Figure
 
 species = [
@@ -21,7 +22,9 @@ species = [
 ]
 
 
-def fig_species_weight(df, interval="year", year_n=2014) -> Figure:
+def fig_species_weight(
+    df: DataFrame, interval: str = "year", year_n: int | None = None
+) -> Figure:
     filtered_df = df
     if interval == "month":
         filtered_df = filtered_df[filtered_df["year"] == year_n]
@@ -39,7 +42,9 @@ def fig_species_weight(df, interval="year", year_n=2014) -> Figure:
     return fig
 
 
-def fig_vessel_catch(df, interval="year", year_n=2014) -> Figure:
+def fig_vessel_catch(
+    df: DataFrame, interval: str = "year", year_n: int | None = None
+) -> Figure:
     filtered_df = df
     if interval == "month":
         filtered_df = filtered_df[filtered_df["year"] == year_n]
@@ -59,7 +64,9 @@ def fig_vessel_catch(df, interval="year", year_n=2014) -> Figure:
     return fig
 
 
-def fig_area_catch(df, interval="year", year_n=None) -> Figure:
+def fig_area_catch(
+    df: DataFrame, interval: str = "year", year_n: int | None = None
+) -> Figure:
     filtered_df = df
     if interval == "month" and year_n is not None:
         filtered_df = filtered_df[filtered_df["year"] == year_n]
@@ -78,7 +85,7 @@ def fig_area_catch(df, interval="year", year_n=None) -> Figure:
     return fig
 
 
-def fig_pie_chart(df: pd.DataFrame, category: str, top_n: int = 5) -> Figure:
+def fig_pie_chart(df: DataFrame, category: str, top_n: int = 5) -> Figure:
     """
     Categories: (vessels, species, area)
     """

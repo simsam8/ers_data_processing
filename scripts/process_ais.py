@@ -6,9 +6,10 @@ from zipfile import ZipFile
 
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
 
 
-def get_dca_with_mmsi(dca_data_path: str, mmsi_data_path: str):
+def get_dca_with_mmsi(dca_data_path: str, mmsi_data_path: str) -> DataFrame:
     """
     Merges dca and mmsi data.
     Returns a dataframe with DCA start and stop times
@@ -31,7 +32,9 @@ def get_dca_with_mmsi(dca_data_path: str, mmsi_data_path: str):
     return merged[["Starttidspunkt", "Stopptidspunkt", "mmsi", "Varighet"]]
 
 
-def get_fish_trips_with_mmsi(fish_trip_data_path: str, mmsi_data_path: str):
+def get_fish_trips_with_mmsi(
+    fish_trip_data_path: str, mmsi_data_path: str
+) -> DataFrame:
     """
     Merges fishing trip data and mmsi data.
     Returns a dataframe with DCA start and stop times
@@ -54,7 +57,9 @@ def get_fish_trips_with_mmsi(fish_trip_data_path: str, mmsi_data_path: str):
     return merged[["Avgangstidspunkt", "Ankomsttidspunkt", "mmsi", "trip_id"]]
 
 
-def _calculate_in_interval(chunk, other, start_column: str, stop_column: str):
+def _calculate_in_interval(
+    chunk, other, start_column: str, stop_column: str
+) -> np.ndarray:
     """
     Helper function to check if an AIS row is in the interval
     of any of the rows of the other dataframe.
@@ -76,7 +81,7 @@ def _calculate_in_interval(chunk, other, start_column: str, stop_column: str):
     return is_in_interval
 
 
-def _apply_marks(chunk, dca_slice, fishing_trips):
+def _apply_marks(chunk, dca_slice, fishing_trips) -> DataFrame:
     """
     Helper function to mark AIS row with DCA duration and fishing state,
     and fishing trip id.
@@ -106,7 +111,9 @@ def _apply_marks(chunk, dca_slice, fishing_trips):
     return chunk
 
 
-def process_ais(file_path, dca_data, fishing_trips):
+def process_ais(
+    file_path: str, dca_data: DataFrame, fishing_trips: DataFrame
+) -> DataFrame:
     """
     Process a single compressed zip file with ais data,
     uses dca_data to mark with fishing information,
@@ -150,7 +157,12 @@ def process_ais(file_path, dca_data, fishing_trips):
     return result
 
 
-def process_ais_folder(ais_data_path, dca_date_slice, fishing_trips, save_destination):
+def process_ais_folder(
+    ais_data_path: str,
+    dca_date_slice: DataFrame,
+    fishing_trips: DataFrame,
+    save_destination: str,
+):
     """
     Reads all files from folder containing AIS data, marks fishing status,\
     and saves to destination.
@@ -168,7 +180,7 @@ def process_ais_folder(ais_data_path, dca_date_slice, fishing_trips, save_destin
             ais_df.to_parquet(f"{save_destination}/{filename}.parquet")
 
 
-def unzip_ais(file_path, destination=None) -> None:
+def unzip_ais(file_path: str, destination: str | None = None) -> None:
     """
     Unzip folder with AIS data.
     If destination is not set, unzips
@@ -180,7 +192,7 @@ def unzip_ais(file_path, destination=None) -> None:
         zObject.extractall(destination)
 
 
-def zip_ais_directory(dir_to_zip, destination):
+def zip_ais_directory(dir_to_zip: str, destination: str) -> None:
     """
     Zip a directory to the destination zipfile
     """
@@ -191,7 +203,7 @@ def zip_ais_directory(dir_to_zip, destination):
                 zObject.write(f_path, os.path.basename(f_path))
 
 
-def main(args):
+def main(args) -> None:
 
     dca_data = get_dca_with_mmsi(args.dca_path, args.mmsi_path)
     fishing_trips = get_fish_trips_with_mmsi(args.f_trips_path, args.mmsi_path)

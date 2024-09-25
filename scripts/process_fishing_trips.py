@@ -4,9 +4,13 @@ import os
 
 import numpy as np
 import pandas as pd
+from pandas import DataFrame, Series
 
 
-def read_and_combine(data_folder):
+def read_and_combine(data_folder: str) -> DataFrame:
+    """
+    Read all data from a data folder, and combine it into a single dataframe.
+    """
     dframes = []
     for file in os.listdir(data_folder):
         if file.endswith(".csv"):
@@ -15,7 +19,7 @@ def read_and_combine(data_folder):
     return pd.concat(dframes)
 
 
-def prepare_data(df, time_column: str):
+def prepare_data(df, time_column: str) -> DataFrame:
     columns = [
         "Melding ID",
         "Radiokallesignal (ERS)",
@@ -29,7 +33,9 @@ def prepare_data(df, time_column: str):
     return df
 
 
-def _prepare_dataframe_for_fishing_trips(df_dep, df_por, vessel_id):
+def _prepare_dataframe_for_fishing_trips(
+    df_dep: DataFrame, df_por: DataFrame, vessel_id
+) -> tuple[DataFrame, DataFrame]:
     dep = df_dep[df_dep["Radiokallesignal (ERS)"] == vessel_id]
     agg_func = {
         "Melding ID": "first",
@@ -39,8 +45,8 @@ def _prepare_dataframe_for_fishing_trips(df_dep, df_por, vessel_id):
         "Havn (kode)": "first",
         "Rundvekt": "sum",
     }
-    dep_agg = dep.groupby("Melding ID", as_index=False).aggregate(agg_func)
-    dep_agg = dep_agg.sort_values("Avgangstidspunkt")
+    dep_out = dep.groupby("Melding ID", as_index=False).aggregate(agg_func)
+    dep_out = dep_out.sort_values("Avgangstidspunkt")
 
     por = df_por[df_por["Radiokallesignal (ERS)"] == vessel_id]
     agg_func = {
@@ -50,24 +56,28 @@ def _prepare_dataframe_for_fishing_trips(df_dep, df_por, vessel_id):
         "Kvantum type (kode)": "first",
         "Rundvekt": "sum",
     }
-    por_agg = por.groupby(
+    por_out = por.groupby(
         ["Melding ID", "Kvantum type (kode)"], as_index=False
     ).aggregate(agg_func)
-    por_piv = por_agg.pivot(
+    por_out = por_out.pivot(
         index="Melding ID", columns="Kvantum type (kode)", values="Rundvekt"
     )
-    por_final = por_piv.join(
+    por_out = por_out.join(
         por[
             ["Melding ID", "Radiokallesignal (ERS)", "Ankomsttidspunkt", "Havn (kode)"]
         ].set_index("Melding ID"),
         on="Melding ID",
     ).drop_duplicates()
-    por_final = por_final.sort_values("Ankomsttidspunkt")
+    por_out = por_out.sort_values("Ankomsttidspunkt")
 
-    return dep_agg, por_final
+    return dep_out, por_out
 
 
-def _prepare_timestamps(df_dep, df_por):
+def _prepare_timestamps(df_dep: DataFrame, df_por: DataFrame) -> DataFrame:
+    """
+    Combines the dataframes and sorts all entries by
+    their timestamps in ascending order.
+    """
     time_stamps = pd.concat([df_dep, df_por])
     time_stamps["Type"] = np.where(time_stamps["Avgangstidspunkt"].isna(), "POR", "DEP")
     time_stamps["Timestamp"] = np.where(
@@ -81,7 +91,7 @@ def _prepare_timestamps(df_dep, df_por):
     return time_stamps
 
 
-def _create_single_trip(start, end):
+def _create_single_trip(start: Series, end: Series) -> Series:
     common_cols = [
         "Melding ID",
         "Timestamp",
@@ -100,9 +110,13 @@ def _create_single_trip(start, end):
     return trip
 
 
-def _define_fishing_trips(time_stamps):
+def _define_fishing_trips(time_stamps: DataFrame) -> DataFrame:
+    """
+    Defines fishing trips for a vessel given a dataframe that is sorted by timestamps.
+    """
     trips = []
-    start, end = None, None
+    start: None | Series = None
+    end: None | Series = None
     for _, data in time_stamps.iterrows():
         if start is None and data["Type"] == "DEP":
             start = data
@@ -122,7 +136,12 @@ def _define_fishing_trips(time_stamps):
     return pd.concat(trips, axis=1).T
 
 
-def define_fishing_trips_all_vessels(dep_data, por_data):
+def define_fishing_trips_all_vessels(
+    dep_data: DataFrame, por_data: DataFrame
+) -> DataFrame:
+    """
+    Defines fishing trips for all unique vessels.
+    """
     trips_vessel = []
     print("Total unique vessels: ", len(dep_data["Radiokallesignal (ERS)"].unique()))
     for vessel in dep_data["Radiokallesignal (ERS)"].unique():
@@ -150,7 +169,7 @@ def define_fishing_trips_all_vessels(dep_data, por_data):
     return all_trips
 
 
-def main(args):
+def main(args) -> None:
     dep_data = prepare_data(read_and_combine(args.dep_path), "Avgangstidspunkt")
     por_data = prepare_data(read_and_combine(args.por_path), "Ankomsttidspunkt")
     trips = define_fishing_trips_all_vessels(dep_data, por_data)
