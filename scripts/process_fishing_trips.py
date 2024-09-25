@@ -2,10 +2,15 @@
 import argparse
 import os
 
+import numpy as np
 import pandas as pd
+from pandas import DataFrame, Series
 
 
-def read_and_combine(data_folder):
+def read_and_combine(data_folder: str) -> DataFrame:
+    """
+    Read all data from a data folder, and combine it into a single dataframe.
+    """
     dframes = []
     for file in os.listdir(data_folder):
         if file.endswith(".csv"):
@@ -14,158 +19,157 @@ def read_and_combine(data_folder):
     return pd.concat(dframes)
 
 
-def prepare_data(df, time_column: str):
-    columns = ["Melding ID", "Radiokallesignal (ERS)", time_column, "Havn (kode)"]
+def prepare_data(df, time_column: str) -> DataFrame:
+    columns = [
+        "Melding ID",
+        "Radiokallesignal (ERS)",
+        time_column,
+        "Havn (kode)",
+        "Kvantum type (kode)",
+        "Rundvekt",
+    ]
     df = df[columns].drop_duplicates()
     df[time_column] = pd.to_datetime(df[time_column], dayfirst=True, format="mixed")
     return df
 
 
-def rearrange_trip_columns(trip_list):
-    trip = pd.DataFrame(
-        [
-            [
-                trip_list[0]["Radiokallesignal (ERS)"],
-                trip_list[0]["Havn (kode)"],
-                trip_list[0]["Avgangstidspunkt"],
-                trip_list[-1]["Havn (kode)"],
-                trip_list[-1]["Ankomsttidspunkt"],
-            ]
-        ],
-        columns=[
-            "ERS",
-            "Havn_avgang",
-            "Avgangstidspunkt",
-            "Havn_ankomst",
-            "Ankomsttidspunkt",
-        ],
+def _prepare_dataframe_for_fishing_trips(
+    df_dep: DataFrame, df_por: DataFrame, vessel_id
+) -> tuple[DataFrame, DataFrame]:
+    dep = df_dep[df_dep["Radiokallesignal (ERS)"] == vessel_id]
+    agg_func = {
+        "Melding ID": "first",
+        "Radiokallesignal (ERS)": "first",
+        "Avgangstidspunkt": "first",
+        "Kvantum type (kode)": "first",
+        "Havn (kode)": "first",
+        "Rundvekt": "sum",
+    }
+    dep_out = dep.groupby("Melding ID", as_index=False).aggregate(agg_func)
+    dep_out = dep_out.sort_values("Avgangstidspunkt")
+
+    por = df_por[df_por["Radiokallesignal (ERS)"] == vessel_id]
+    agg_func = {
+        "Melding ID": "first",
+        "Radiokallesignal (ERS)": "first",
+        "Ankomsttidspunkt": "first",
+        "Kvantum type (kode)": "first",
+        "Rundvekt": "sum",
+    }
+    por_out = por.groupby(
+        ["Melding ID", "Kvantum type (kode)"], as_index=False
+    ).aggregate(agg_func)
+    por_out = por_out.pivot(
+        index="Melding ID", columns="Kvantum type (kode)", values="Rundvekt"
     )
+    por_out = por_out.join(
+        por[
+            ["Melding ID", "Radiokallesignal (ERS)", "Ankomsttidspunkt", "Havn (kode)"]
+        ].set_index("Melding ID"),
+        on="Melding ID",
+    ).drop_duplicates()
+    por_out = por_out.sort_values("Ankomsttidspunkt")
+
+    return dep_out, por_out
+
+
+def _prepare_timestamps(df_dep: DataFrame, df_por: DataFrame) -> DataFrame:
+    """
+    Combines the dataframes and sorts all entries by
+    their timestamps in ascending order.
+    """
+    time_stamps = pd.concat([df_dep, df_por])
+    time_stamps["Type"] = np.where(time_stamps["Avgangstidspunkt"].isna(), "POR", "DEP")
+    time_stamps["Timestamp"] = np.where(
+        time_stamps["Avgangstidspunkt"].isna(),
+        time_stamps["Ankomsttidspunkt"],
+        time_stamps["Avgangstidspunkt"],
+    )
+    time_stamps = (
+        time_stamps.sort_values("Timestamp").reset_index().drop("index", axis=1)
+    )
+    return time_stamps
+
+
+def _create_single_trip(start: Series, end: Series) -> Series:
+    common_cols = [
+        "Melding ID",
+        "Timestamp",
+        "Type",
+        "Rundvekt",
+        "KG",
+        "OB",
+        "Kvantum type (kode)",
+    ]
+    start = start.drop(common_cols + ["Ankomsttidspunkt", "Radiokallesignal (ERS)"])
+    start = start.rename({"Havn (kode)": "Havn_start (kode)"})
+    end = end.drop(common_cols + ["Avgangstidspunkt"])
+    end = end.rename({"Havn (kode)": "Havn_slutt (kode)"})
+
+    trip = pd.concat([start, end])
     return trip
 
 
-# NOTE: this function may need to be reworked, but it seems to work as intended
-def define_fishing_trips(dep_df, por_df):
+def _define_fishing_trips(time_stamps: DataFrame) -> DataFrame:
     """
-    Defines all fishing trips for a vessel.
+    Defines fishing trips for a vessel given a dataframe that is sorted by timestamps.
     """
-    dep_df = dep_df.sort_values("Avgangstidspunkt")
-    por_df = por_df.sort_values("Ankomsttidspunkt")
-    fishing_trips = []
+    trips = []
+    start: None | Series = None
+    end: None | Series = None
+    for _, data in time_stamps.iterrows():
+        if start is None and data["Type"] == "DEP":
+            start = data
 
-    # Initialize indices and state variables
-    dep_idx, por_idx = 0, 0
-    current_dep, current_por = None, None
-    in_trip = False
-    no_port = True
-    current_trip = []
+        if start is not None and data["Type"] == "POR" and data["KG"] == data["OB"]:
+            end = data
 
-    if dep_df.empty or por_df.empty:
-        return pd.DataFrame(
-            columns=[
-                "ERS",
-                "Havn_avgang",
-                "Avgangstidspunkt",
-                "Havn_ankomst",
-                "Ankomsttidspunkt",
-            ]
+        if end is not None and data["Type"] == "DEP":
+            trips.append(_create_single_trip(start, end))
+            start = data
+            end = None
+
+    # Add the remaining trip
+    if start is not None and end is not None:
+        trips.append(_create_single_trip(start, end))
+
+    return pd.concat(trips, axis=1).T
+
+
+def define_fishing_trips_all_vessels(
+    dep_data: DataFrame, por_data: DataFrame
+) -> DataFrame:
+    """
+    Defines fishing trips for all unique vessels.
+    """
+    trips_vessel = []
+    print("Total unique vessels: ", len(dep_data["Radiokallesignal (ERS)"].unique()))
+    for vessel in dep_data["Radiokallesignal (ERS)"].unique():
+        df_dep, df_por = _prepare_dataframe_for_fishing_trips(
+            dep_data, por_data, vessel
         )
 
-    # Iterate through the arrival dataframe
-    while por_idx < len(por_df) and dep_idx < len(dep_df):
-        if not in_trip:
-            # If not currently in a trip, start a new trip
-            if dep_idx < len(dep_df):
-                current_dep = dep_df.iloc[dep_idx]
-                current_trip = []
-                current_trip.append(current_dep)
-                in_trip, no_port = True, True
-                dep_idx += 1
-            else:  # No more departures left to process
-                pass
+        # Skip vessels that does not contain KG or OB in POR data
+        if "KG" not in df_por.columns:
+            print("KG not in vessel: ", vessel)
+            continue
+        elif "OB" not in df_por.columns:
+            print("OB not in vessel: ", vessel)
+            continue
 
-        # Get the current arrival entry
-        current_por = por_df.iloc[por_idx]
+        time_stamps = _prepare_timestamps(df_dep, df_por)
+        trips = _define_fishing_trips(time_stamps)
+        trips_vessel.append(trips)
 
-        # If the current arrival time is before the next departure time
-        if (
-            dep_idx < len(dep_df)
-            and current_por["Ankomsttidspunkt"]
-            < dep_df.iloc[dep_idx]["Avgangstidspunkt"]
-        ):
-            current_trip.append(current_por)
-            por_idx += 1
-            no_port = False
-        else:
-            # If no port was encountered before the next departure,
-            # add the next departure
-            if dep_idx < len(dep_df) and no_port:
-                current_dep = dep_df.iloc[dep_idx]
-                current_trip.append(current_dep)
-                dep_idx += 1
-
-            # Edge case when on the last departure, to add the last arrival
-            # and finish trip
-            elif (
-                dep_idx == len(dep_df)
-                and current_dep["Avgangstidspunkt"] < current_por["Ankomsttidspunkt"]
-            ):
-                current_trip.append(current_por)
-                fishing_trips.append(rearrange_trip_columns(current_trip))
-                current_trip = []
-                in_trip = False
-            else:  # End the current trip
-                in_trip = False
-                fishing_trips.append(rearrange_trip_columns(current_trip))
-                current_trip = []
-
-    # Add the last complete trip
-    if in_trip and current_trip:
-        try:
-            fishing_trips.append(rearrange_trip_columns(current_trip))
-        except KeyError:
-            pass
-    return (
-        pd.concat(fishing_trips, ignore_index=True)
-        if fishing_trips
-        else pd.DataFrame(
-            columns=[
-                "ERS",
-                "Havn_avgang",
-                "Avgangstidspunkt",
-                "Havn_ankomst",
-                "Ankomsttidspunkt",
-            ]
-        )
-    )
+    all_trips = pd.concat(trips_vessel).reset_index(drop=True)
+    all_trips["trip_id"] = all_trips["Radiokallesignal (ERS)"] + (
+        all_trips["Avgangstidspunkt"].apply(lambda x: x.timestamp())
+        + all_trips["Ankomsttidspunkt"].apply(lambda x: x.timestamp())
+    ).astype(int).astype(str)
+    return all_trips
 
 
-def define_fishing_trips_all_vessels(dep_data, por_data):
-    """
-    Define fishing trips for all vessels.
-    """
-    call_signs = dep_data["Radiokallesignal (ERS)"].unique()
-    all_trips = []
-    for c_sign in call_signs:
-        dep = dep_data.where(dep_data["Radiokallesignal (ERS)"] == c_sign).dropna(
-            how="all"
-        )
-        por = por_data.where(por_data["Radiokallesignal (ERS)"] == c_sign).dropna(
-            how="all"
-        )
-        c_trips = define_fishing_trips(dep, por)
-        all_trips.append(c_trips)
-
-    trip_frame = pd.concat(all_trips)
-    trip_frame = trip_frame.where(
-        trip_frame["Avgangstidspunkt"] < trip_frame["Ankomsttidspunkt"]
-    ).dropna(how="all")
-    trip_frame = trip_frame.sort_values("Avgangstidspunkt")
-    trip_frame = trip_frame.reset_index(drop=True)
-    trip_frame["trip_id"] = trip_frame.index + 1
-    return trip_frame
-
-
-def main(args):
+def main(args) -> None:
     dep_data = prepare_data(read_and_combine(args.dep_path), "Avgangstidspunkt")
     por_data = prepare_data(read_and_combine(args.por_path), "Ankomsttidspunkt")
     trips = define_fishing_trips_all_vessels(dep_data, por_data)

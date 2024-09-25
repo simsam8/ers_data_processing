@@ -7,6 +7,7 @@ import pandas as pd
 import plotly
 from dash import Dash, Input, Output, callback, dcc, html
 from figures import fig_area_catch, fig_pie_chart, fig_species_weight, fig_vessel_catch
+from pandas import DataFrame
 
 parser = argparse.ArgumentParser(description="App for visualizing fishing data.")
 parser.add_argument(
@@ -24,7 +25,7 @@ year_min = df["year"].min()
 vessels = df["Radiokallesignal (ERS)"].unique()
 
 
-def generate_table(df, max_rows=10) -> html.Table:
+def generate_table(df: DataFrame, max_rows: int = 10) -> html.Table:
     """
     Generate a table of the given dataframe:
 
@@ -49,7 +50,7 @@ def generate_table(df, max_rows=10) -> html.Table:
     )
 
 
-def generate_interval_menu(id) -> html.Div:
+def generate_interval_menu(id: str) -> html.Div:
     """
     Creates a menu for an interval menu:
 
@@ -78,7 +79,7 @@ def generate_interval_menu(id) -> html.Div:
     )
 
 
-def generate_pie_chart_menu(id) -> html.Div:
+def generate_pie_chart_menu(id: str) -> html.Div:
     """
     Creates a menu for the pie chart.
 
@@ -105,7 +106,13 @@ def generate_pie_chart_menu(id) -> html.Div:
     )
 
 
-def create_container(id, title, graph_type, graph_function=None, **kwargs) -> html.Div:
+def create_container(
+    id: str,
+    title: str,
+    graph_type: str,
+    graph_function=None,
+    **kwargs,
+) -> html.Div:
     """
     Creates a container with a given graph type and graph function.
 
@@ -179,7 +186,7 @@ app.layout = html.Div(
 ####################
 
 
-def set_graph_interval(container_id, graph_function):
+def set_graph_interval(container_id: str, graph_function):
     @callback(
         Output(f"{container_id}_graph", "figure"),
         [

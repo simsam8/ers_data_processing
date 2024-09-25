@@ -4,9 +4,10 @@ import os
 
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
 
 
-def process_dca_data(dca_data: pd.DataFrame):
+def process_dca_data(dca_data: DataFrame) -> DataFrame:
     """
     Reduces and transforms DCA data.
     """
@@ -157,7 +158,7 @@ def process_dca_data(dca_data: pd.DataFrame):
     return df
 
 
-def save_by_month(df: pd.DataFrame, column: str, dest: str):
+def save_by_month(df: DataFrame, column: str, dest: str) -> None:
     """
     Takes a dataframe, groups it and saves by month using the given
     column.
@@ -182,7 +183,7 @@ def save_by_month(df: pd.DataFrame, column: str, dest: str):
             month_n.to_csv(f"{dest}/{year}_{month}.csv", index=False)
 
 
-def main(args):
+def main(args) -> None:
     if args.is_dir:
         dca_frames = []
         for dca_file in os.listdir(args.path):

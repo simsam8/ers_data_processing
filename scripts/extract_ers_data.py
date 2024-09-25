@@ -23,7 +23,7 @@ def extract_ers(path: str, target_path: str):
                     _move_to_dir(zObject, info.filename, target_path)
 
 
-def main(args):
+def main(args) -> None:
     extract_ers(args.data_path, args.target_path)
 
 
