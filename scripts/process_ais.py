@@ -49,7 +49,7 @@ def get_fish_trips_with_mmsi(
     mmsi_data = pd.read_excel(mmsi_data_path)
     mmsi_data = mmsi_data[["mmsi", "kallesignal"]]
 
-    merged = ft.merge(mmsi_data, left_on="ERS", right_on="kallesignal").drop(
+    merged = ft.merge(mmsi_data, left_on="Radiokallesignal (ERS)", right_on="kallesignal").drop(
         columns=["kallesignal"]
     )
     merged["Avgangstidspunkt"] = pd.to_datetime(merged["Avgangstidspunkt"])
@@ -96,9 +96,9 @@ def _apply_marks(chunk, dca_slice, fishing_trips) -> DataFrame:
         chunk, dca_slice, "Starttidspunkt", "Stopptidspunkt"
     )
 
-    # Initialize the duration column with NaN
-    chunk["trip_id"] = np.nan
-    chunk["duration"] = np.nan
+    # Initialize the trip_id and duration column with None
+    chunk["trip_id"] = None
+    chunk["duration"] = None
 
     # Assign the duration and trip id where the interval is True
     for i in range(len(chunk)):
@@ -170,7 +170,6 @@ def process_ais_folder(
     ais_list = os.listdir(ais_data_path)
     for i, ais_day in enumerate(ais_list):
         if ais_day.endswith(".zip"):
-            print(i, end=" ")
             ais_df = process_ais(
                 os.path.join(ais_data_path, ais_day), dca_date_slice, fishing_trips
             )
