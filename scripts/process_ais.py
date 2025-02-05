@@ -49,9 +49,9 @@ def get_fish_trips_with_mmsi(
     mmsi_data = pd.read_excel(mmsi_data_path)
     mmsi_data = mmsi_data[["mmsi", "kallesignal"]]
 
-    merged = ft.merge(mmsi_data, left_on="Radiokallesignal (ERS)", right_on="kallesignal").drop(
-        columns=["kallesignal"]
-    )
+    merged = ft.merge(
+        mmsi_data, left_on="Radiokallesignal (ERS)", right_on="kallesignal"
+    ).drop(columns=["kallesignal"])
     merged["Avgangstidspunkt"] = pd.to_datetime(merged["Avgangstidspunkt"])
     merged["Ankomsttidspunkt"] = pd.to_datetime(merged["Ankomsttidspunkt"])
     return merged[["Avgangstidspunkt", "Ankomsttidspunkt", "mmsi", "trip_id"]]
@@ -154,6 +154,7 @@ def process_ais(
     ).dropna()
 
     result = _apply_marks(ais_data, dca_slice, fish_trip_slice)
+    result = result.dropna(subset=["duration"])
     return result
 
 
