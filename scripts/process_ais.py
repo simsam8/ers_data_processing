@@ -7,6 +7,7 @@ from zipfile import ZipFile
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
+from tqdm import tqdm
 
 
 def get_dca_with_mmsi(dca_data_path: str, mmsi_data_path: str) -> DataFrame:
@@ -59,7 +60,7 @@ def get_fish_trips_with_mmsi(
 
 def _calculate_in_interval(
     chunk, other, start_column: str, stop_column: str
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Helper function to check if an AIS row is in the interval
     of any of the rows of the other dataframe.
@@ -78,7 +79,7 @@ def _calculate_in_interval(
     is_in_stop = dates[:, None] <= stop_times
     same_mmsi = chunk_mmsi[:, None] == other_mmsi
     is_in_interval = (is_in_start & is_in_stop) & same_mmsi
-    return is_in_interval
+    return is_in_interval, same_mmsi
 
 
 def _apply_marks(chunk, dca_slice, fishing_trips) -> DataFrame:
@@ -89,16 +90,17 @@ def _apply_marks(chunk, dca_slice, fishing_trips) -> DataFrame:
     trip_ids = fishing_trips["trip_id"].values
     duration = dca_slice["Varighet"].values
 
-    is_in_interval_trip = _calculate_in_interval(
+    is_in_interval_trip, _ = _calculate_in_interval(
         chunk, fishing_trips, "Avgangstidspunkt", "Ankomsttidspunkt"
     )
-    is_in_interval_dca = _calculate_in_interval(
+    is_in_interval_dca, has_mmsi = _calculate_in_interval(
         chunk, dca_slice, "Starttidspunkt", "Stopptidspunkt"
     )
 
     # Initialize the trip_id and duration column with None
     chunk["trip_id"] = None
     chunk["duration"] = None
+    chunk["has_mmsi"] = False
 
     # Assign the duration and trip id where the interval is True
     for i in range(len(chunk)):
@@ -106,6 +108,8 @@ def _apply_marks(chunk, dca_slice, fishing_trips) -> DataFrame:
             chunk.loc[i, "duration"] = duration[is_in_interval_dca[i]].max()
         if is_in_interval_trip[i].any():
             chunk.loc[i, "trip_id"] = trip_ids[is_in_interval_trip[i]].max()
+        if has_mmsi[i].any():
+            chunk.loc[i, "has_mmsi"] = True
 
     chunk["fishing"] = is_in_interval_dca.any(axis=1)
     return chunk
@@ -145,16 +149,29 @@ def process_ais(
     # Get date from AIS filename and, filter DCA data and fishing trips
     ais_date = os.path.basename(file_path)[4:-4]
     dca_slice = dca_data.where(
-        dca_data["Starttidspunkt"].dt.date
-        == datetime.strptime(ais_date, "%Y%m%d").date()
+        (
+            dca_data["Starttidspunkt"].dt.date
+            <= datetime.strptime(ais_date, "%Y%m%d").date()
+        )
+        & (
+            dca_data["Stopptidspunkt"].dt.date
+            >= datetime.strptime(ais_date, "%Y%m%d").date()
+        )
     ).dropna()
     fish_trip_slice = fishing_trips.where(
-        fishing_trips["Avgangstidspunkt"].dt.date
-        == datetime.strptime(ais_date, "%Y%m%d").date()
+        (
+            fishing_trips["Avgangstidspunkt"].dt.date
+            <= datetime.strptime(ais_date, "%Y%m%d").date()
+        )
+        & (
+            fishing_trips["Ankomsttidspunkt"].dt.date
+            >= datetime.strptime(ais_date, "%Y%m%d").date()
+        )
     ).dropna()
 
     result = _apply_marks(ais_data, dca_slice, fish_trip_slice)
-    result = result.dropna(subset=["duration"])
+    result = result[result["has_mmsi"]]
+    result = result.drop("has_mmsi", axis=1)
     return result
 
 
@@ -169,7 +186,7 @@ def process_ais_folder(
     and saves to destination.
     """
     ais_list = os.listdir(ais_data_path)
-    for i, ais_day in enumerate(ais_list):
+    for _, ais_day in tqdm(enumerate(ais_list), desc="Processing ais days"):
         if ais_day.endswith(".zip"):
             ais_df = process_ais(
                 os.path.join(ais_data_path, ais_day), dca_date_slice, fishing_trips
@@ -217,7 +234,7 @@ def main(args) -> None:
 
         # Read and process
         print("Processing and marking...")
-        for ais_dir in os.listdir(args.path):
+        for ais_dir in tqdm(os.listdir(args.path), desc="Processing year"):
             if ais_dir.startswith("AIS") and not ais_dir.endswith(".zip"):
                 filepath_dir = os.path.join(args.path, ais_dir)
                 target_dir = os.path.join(args.target_dir, ais_dir)

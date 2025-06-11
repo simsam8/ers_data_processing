@@ -163,15 +163,21 @@ def define_fishing_trips_all_vessels(
 
     all_trips = pd.concat(trips_vessel).reset_index(drop=True)
     all_trips["trip_id"] = all_trips["Radiokallesignal (ERS)"] + (
-        all_trips["Avgangstidspunkt"].apply(lambda x: x.timestamp())
-        + all_trips["Ankomsttidspunkt"].apply(lambda x: x.timestamp())
-    ).astype(int).astype(str)
+        all_trips["Avgangstidspunkt"]
+        .apply(lambda x: x.timestamp())
+        .astype(int)
+        .astype(str)
+        + all_trips["Ankomsttidspunkt"]
+        .apply(lambda x: x.timestamp())
+        .astype(int)
+        .astype(str)
+    )
     return all_trips
 
 
 def main(args) -> None:
-    dep_data = prepare_data(read_and_combine(args.dep_path), "Avgangstidspunkt")
-    por_data = prepare_data(read_and_combine(args.por_path), "Ankomsttidspunkt")
+    dep_data = prepare_data(pd.read_csv(args.dep_path), "Avgangstidspunkt")
+    por_data = prepare_data(pd.read_csv(args.por_path), "Ankomsttidspunkt")
     trips = define_fishing_trips_all_vessels(dep_data, por_data)
     trips.to_csv(args.target_csv, index=False)
 
